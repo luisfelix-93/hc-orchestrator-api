@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 dotenv.config();
 
+
 export const config = {
     redis: {
         host: process.env.REDIS_ROST || '127.0.0.1',
@@ -11,6 +12,7 @@ export const config = {
         healthCheckResults: 'health-check-results',
     },
     apiPort: parseInt(process.env.API_PORT || '5000', 10),
-    databeseUrl: process.env.MONGO_URI || 'mongodb://localhost:27017/health-check-db',
-    apiSecret: process.env.API_KEY 
+    cronSchedule: process.env.CRON_SCHEDULE || '*/1 * * * *',
+    databaseUrl: process.env.MONGO_URI || 'mongodb://localhost:27017/health-check-db',
+    apiSecret: process.env.API_KEY
 };

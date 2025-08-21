@@ -1,31 +1,42 @@
 import cron from 'node-cron';
 import { EndpointModel } from '../api/endpoints/endpoint.model';
 import { healthCheckJobsQueue } from './queue';
+import { config } from '../config';
+
+let isJobRunning = false;
 
 export function startScheduler() {
   console.log('⏰ Agendador iniciado. Verificando a cada minuto.');
 
-  // VERIFIQUE ESTA LINHA: O primeiro argumento DEVE ser a string de tempo.
-  cron.schedule('*/1 * * * *', async () => {
+  cron.schedule(config.cronSchedule, async () => {
+    if (isJobRunning) {
+      console.log('[NODE-CRON] [WARN] Tarefa anterior ainda em execução. Pulando esta execução para evitar sobreposição.');
+      return;
+    }
+
+    isJobRunning = true;
     console.log('🗓️ Executando tarefa agendada: buscando endpoints para verificar...');
 
     try {
-      const endpoints = await EndpointModel.find();
-
-      if (endpoints.length === 0) {
-        console.log('Nenhum endpoint para verificar.');
-        return;
-      }
-
-      for (const endpoint of endpoints) {
+      let count = 0;
+      for await (const endpoint of EndpointModel.find().select('url').cursor()) {
+        console.log(`➕ Adicionando job para a URL: ${endpoint.url}`);
         await healthCheckJobsQueue.add('check', {
           url: endpoint.url,
           endpointId: endpoint.id,
         });
-        console.log(`➕ Job adicionado para a URL: ${endpoint.url}`);
+        count++;
+      }
+
+      if (count === 0) {
+        console.log('Nenhum endpoint para verificar.');
+      } else {
+        console.log(`✅ ${count} jobs adicionados à fila.`);
       }
     } catch (error) {
       console.error('Erro ao buscar endpoints e agendar jobs:', error);
+    } finally {
+      isJobRunning = false;
     }
   });
 }

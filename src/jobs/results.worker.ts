@@ -12,17 +12,17 @@ interface HealthCheckResult {
     endpointId: string; // Precisamos do ID para salvar corretamente
 }
 
-export function startResultsWorker() {
+export function startResultsWorker(): Worker<HealthCheckResult> {
     const connectionOpts = { host: config.redis.host, port: config.redis.port };
     console.log('👂 Ouvinte de resultados iniciado.');
 
-    new Worker<HealthCheckResult>(config.queues.healthCheckResults,
+    const worker = new Worker<HealthCheckResult>(config.queues.healthCheckResults,
         async (job) => {
             const result = job.data;
             console.log(`💾 Recebido resultado para endpoint ID ${result.endpointId}: ${result.status}`);
             try {
                 await HealthCheckLogModel.create({
-                    status: result.status,
+                    status: result.status,  
                     statusCode: result.statusCode,
                     responseTimeInMs: result.responseTimeInMs,
                     endpointId: result.endpointId, // Associa o log ao endpoint
@@ -36,4 +36,6 @@ export function startResultsWorker() {
         },
         { connection: connectionOpts }
     );
+
+    return worker;
 }
