@@ -43,7 +43,7 @@ Siga estas instruções para obter uma cópia do projeto em sua máquina local p
 
 1. **Clone o repositório:**
    ```bash
-   git clone <URL_DO_SEU_REPOSITORIO>
+   git clone https://github.com/luisfelix-93/hc-orchestrator-api
    cd dev-health-check/orchestrator-api
    ```
 
@@ -136,8 +136,6 @@ Para um ambiente padronizado, você pode usar o Docker.
 ```
 
 ## 📖 Endpoints da API
-
-(Esta seção permanece a mesma da versão anterior)
 
 ### Gerenciamento de Serviços (`/endpoints`)
 
