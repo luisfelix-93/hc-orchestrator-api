@@ -25,8 +25,12 @@ FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
-# Copia as dependências de produção do estágio de build
-COPY --from=build /usr/src/app/node_modules ./node_modules
+# Copia os arquivos de definição de pacotes
+COPY package*.json ./
+
+# Instala apenas as dependências de produção
+RUN npm ci --only=production
+
 # Copia o código compilado do estágio de build
 COPY --from=build /usr/src/app/dist ./dist
 
@@ -35,4 +39,3 @@ EXPOSE 5001
 
 # Comando para iniciar a aplicação
 CMD [ "node", "dist/index.js" ]
-
