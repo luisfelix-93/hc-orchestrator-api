@@ -5,7 +5,7 @@ dotenv.config();
 export const config = {
     redis: {
         host: process.env.REDIS_HOST || '127.0.0.1',
-        port: parseInt(process.env.REDIS_PORT || '6378', 10),
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
         cacheTtl: parseInt(process.env.REDIS_CACHE_TTL || '300', 10), // 5 minutes
     },
     queues: {
