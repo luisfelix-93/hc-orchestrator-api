@@ -30,14 +30,16 @@ describe('Logs Service', () => {
             const mockLogs = [{ status: 'Online' }];
 
             const mockLimit = jest.fn().mockResolvedValue(mockLogs);
-            const mockSort = jest.fn().mockReturnValue({ limit: mockLimit });
+            const mockSkip = jest.fn().mockReturnValue({ limit: mockLimit });
+            const mockSort = jest.fn().mockReturnValue({ skip: mockSkip });
             (HealthCheckLogModel.find as jest.Mock).mockReturnValue({ sort: mockSort });
 
             const result = await getLogsByEndpointId(endpointId);
 
             expect(HealthCheckLogModel.find).toHaveBeenCalledWith({ endpointId });
             expect(mockSort).toHaveBeenCalledWith({ createdAt: -1 });
-            expect(mockLimit).toHaveBeenCalledWith(200);
+            expect(mockSkip).toHaveBeenCalledWith(0);
+            expect(mockLimit).toHaveBeenCalledWith(100);
             expect(result).toEqual(mockLogs);
         });
     });

@@ -5,49 +5,65 @@ import {
     getAllEndpoints,
     getEndpointById
 } from '../../src/api/endpoints/endpoint.service';
+import redisClient from '../../src/lib/redis';
 
-// Mock do Mongoose Model
+jest.mock('redis');
 jest.mock('../../src/api/endpoints/endpoint.model');
 
 describe('Endpoint Service', () => {
 
-    // Limpa todos os mocks após cada teste
     afterEach(() => {
         jest.clearAllMocks();
     });
 
     describe('getAllEndpoints', () => {
-        it('should call EndpointModel.find and return the result', async () => {
+        it('should return cached endpoints if available', async () => {
             const mockEndpoints = [{ name: 'Test', url: 'http://test.com' }];
+            (redisClient.get as jest.Mock).mockResolvedValue(JSON.stringify(mockEndpoints));
+
+            const result = await getAllEndpoints();
+
+            expect(redisClient.get).toHaveBeenCalledWith('endpoints');
+            expect(EndpointModel.find).not.toHaveBeenCalled();
+            expect(result).toEqual(mockEndpoints);
+        });
+
+        it('should fetch endpoints from DB and cache them if not cached', async () => {
+            const mockEndpoints = [{ name: 'Test', url: 'http://test.com' }];
+            (redisClient.get as jest.Mock).mockResolvedValue(null);
             (EndpointModel.find as jest.Mock).mockResolvedValue(mockEndpoints);
 
             const result = await getAllEndpoints();
 
+            expect(redisClient.get).toHaveBeenCalledWith('endpoints');
             expect(EndpointModel.find).toHaveBeenCalledTimes(1);
+            expect(redisClient.set).toHaveBeenCalledWith('endpoints', JSON.stringify(mockEndpoints), { EX: 300 });
             expect(result).toEqual(mockEndpoints);
         });
     });
 
     describe('create', () => {
-        it('should call EndpointModel.create with correct parameters and return the result', async () => {
+        it('should create an endpoint and invalidate the cache', async () => {
             const newEndpoint = { name: 'New', url: 'http://new.com' };
             (EndpointModel.create as jest.Mock).mockResolvedValue(newEndpoint);
 
             const result = await create('New', 'http://new.com');
 
             expect(EndpointModel.create).toHaveBeenCalledWith({ name: 'New', url: 'http://new.com' });
+            expect(redisClient.del).toHaveBeenCalledWith('endpoints');
             expect(result).toEqual(newEndpoint);
         });
     });
 
     describe('deleteEndpoint', () => {
-        it('should call EndpointModel.findByIdAndDelete with the correct id', async () => {
+        it('should delete an endpoint and invalidate the cache', async () => {
             const endpointId = 'some-id';
-            (EndpointModel.findByIdAndDelete as jest.Mock).mockResolvedValue({}); // Retorna um objeto vazio para indicar sucesso
+            (EndpointModel.findByIdAndDelete as jest.Mock).mockResolvedValue({});
 
             await deleteEndpoint(endpointId);
 
             expect(EndpointModel.findByIdAndDelete).toHaveBeenCalledWith(endpointId);
+            expect(redisClient.del).toHaveBeenCalledWith('endpoints');
         });
     });
 

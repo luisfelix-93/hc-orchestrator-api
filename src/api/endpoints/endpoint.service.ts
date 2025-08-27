@@ -1,15 +1,34 @@
 import { EndpointModel } from "./endpoint.model";
+import redisClient from "../../lib/redis";
+import { config } from "../../config";
+
+const ENDPOINTS_CACHE_KEY = 'endpoints';
 
 export async function getAllEndpoints() {
-    return EndpointModel.find();
+    const cachedEndpoints = await redisClient.get(ENDPOINTS_CACHE_KEY);
+    if (cachedEndpoints) {
+        console.log('[Service] Cache hit for endpoints.');
+        return JSON.parse(cachedEndpoints);
+    }
+
+    console.log('[Service] Cache miss for endpoints. Fetching from database.');
+    const endpoints = await EndpointModel.find();
+    await redisClient.set(ENDPOINTS_CACHE_KEY, JSON.stringify(endpoints), {
+        EX: config.redis.cacheTtl
+    });
+    return endpoints;
 }
 
 export async function create(name: string, url: string) {
-    return EndpointModel.create({ name, url });
+    const newEndpoint = await EndpointModel.create({ name, url });
+    await redisClient.del(ENDPOINTS_CACHE_KEY);
+    return newEndpoint;
 }
 
 export async function deleteEndpoint(id: string) {
-    return EndpointModel.findByIdAndDelete(id);
+    const deletedEndpoint = await EndpointModel.findByIdAndDelete(id);
+    await redisClient.del(ENDPOINTS_CACHE_KEY);
+    return deletedEndpoint;
 
 }
 

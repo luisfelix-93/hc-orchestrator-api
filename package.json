@@ -5,7 +5,8 @@
   "scripts": {
     "test": "jest",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "build:prod": "node build.js && tsc --declaration --emitDeclarationOnly"
   },
   "keywords": [],
   "author": "",
@@ -13,11 +14,13 @@
   "description": "",
   "devDependencies": {
     "@types/cors": "^2.8.19",
+    "@types/event-loop-lag": "^1.0.33",
     "@types/express": "^5.0.3",
     "@types/jest": "^30.0.0",
     "@types/mongoose": "^5.11.96",
     "@types/node": "^24.0.14",
     "@types/supertest": "^6.0.3",
+    "esbuild": "^0.25.9",
     "jest": "^30.0.5",
     "mongodb-memory-server": "^10.2.0",
     "supertest": "^7.1.4",
@@ -26,13 +29,13 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@types/node-cron": "^3.0.11",
     "axios": "^1.11.0",
     "bullmq": "^5.56.4",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
+    "event-loop-lag": "^1.4.0",
     "express": "^5.1.0",
     "mongoose": "^8.16.4",
-    "node-cron": "^4.2.1"
+    "redis": "^5.8.2"
   }
 }

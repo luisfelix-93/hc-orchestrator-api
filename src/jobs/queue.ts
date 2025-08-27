@@ -9,3 +9,5 @@ const connectionOpts = {
 export const healthCheckJobsQueue = new Queue(config.queues.healthCheckJobs, {
     connection: connectionOpts
 });
+
+export const schedulerQueue = new Queue(config.queues.schedulerQueue, { connection: connectionOpts });

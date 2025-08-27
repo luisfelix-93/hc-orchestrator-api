@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import mongoose from 'mongoose';
 import { HealthCheckLogModel } from '../../src/api/logs/logs.models';
 import { startResultsWorker } from '../../src/jobs/results.worker';
 
@@ -6,65 +7,93 @@ import { startResultsWorker } from '../../src/jobs/results.worker';
 jest.mock('bullmq');
 jest.mock('../../src/api/logs/logs.models');
 
-describe('Results Worker', () => {
+// Usar timers falsos para controlar o setTimeout do buffer
+jest.useFakeTimers();
+
+describe('Results Worker with Buffering', () => {
     let workerProcessor: (job: { data: any; }) => Promise<void>;
+    const BATCH_SIZE = 50; // Deve ser o mesmo valor do worker
+    const FLUSH_INTERVAL = 10000; // Deve ser o mesmo valor do worker
 
     beforeAll(() => {
-        // Mock da implementação do Worker para capturar o processador
         (Worker as jest.Mock).mockImplementation((queueName, processor) => {
             workerProcessor = processor;
-            return { // Retorna um objeto worker mockado se necessário
-                on: jest.fn(),
-                close: jest.fn(),
-            };
+            return { on: jest.fn(), close: jest.fn() };
         });
     });
 
     afterEach(() => {
         jest.clearAllMocks();
+        jest.clearAllTimers(); // Limpa os timers falsos
     });
 
-    it('should process a job and save the log to the database', async () => {
-        const mockJob = {
+    it('should add results to buffer and flush when BATCH_SIZE is reached', async () => {
+        startResultsWorker();
+
+        const jobs = Array.from({ length: BATCH_SIZE }, (_, i) => ({
             data: {
                 status: 'Online',
                 statusCode: 200,
-                responseTimeInMs: 123,
-                endpointId: 'endpoint-123',
+                responseTimeInMs: 100 + i,
+                endpointId: new mongoose.Types.ObjectId().toString(),
+            },
+        }));
+
+        // Processa BATCH_SIZE - 1 jobs, o buffer não deve ser esvaziado
+        for (let i = 0; i < BATCH_SIZE - 1; i++) {
+            await workerProcessor(jobs[i]);
+        }
+        expect(HealthCheckLogModel.insertMany).not.toHaveBeenCalled();
+
+        // Processa o último job, o que deve disparar o flush
+        await workerProcessor(jobs[BATCH_SIZE - 1]);
+
+        expect(HealthCheckLogModel.insertMany).toHaveBeenCalledTimes(1);
+        expect(HealthCheckLogModel.insertMany).toHaveBeenCalledWith(expect.any(Array));
+        const insertedDocs = (HealthCheckLogModel.insertMany as jest.Mock).mock.calls[0][0];
+        expect(insertedDocs.length).toBe(BATCH_SIZE);
+    });
+
+    it('should flush the buffer when FLUSH_INTERVAL is reached', async () => {
+        startResultsWorker();
+
+        const job = {
+            data: {
+                status: 'Offline',
+                statusCode: 500,
+                responseTimeInMs: 50,
+                endpointId: new mongoose.Types.ObjectId().toString(),
             },
         };
 
-        // Inicia o worker para que o processador seja registrado
-        startResultsWorker();
+        await workerProcessor(job);
 
-        // Executa o processador com o job mockado
-        await workerProcessor(mockJob);
+        // O buffer ainda não foi esvaziado
+        expect(HealthCheckLogModel.insertMany).not.toHaveBeenCalled();
 
-        // Verifica se o método de criação de log foi chamado com os dados corretos
-        expect(HealthCheckLogModel.create).toHaveBeenCalledTimes(1);
-        expect(HealthCheckLogModel.create).toHaveBeenCalledWith({
-            status: 'Online',
-            statusCode: 200,
-            responseTimeInMs: 123,
-            endpointId: 'endpoint-123',
-        });
+        // Avança o tempo para disparar o setTimeout
+        jest.advanceTimersByTime(FLUSH_INTERVAL);
+
+        // Agora o buffer deve ter sido esvaziado
+        expect(HealthCheckLogModel.insertMany).toHaveBeenCalledTimes(1);
+        const insertedDocs = (HealthCheckLogModel.insertMany as jest.Mock).mock.calls[0][0];
+        expect(insertedDocs.length).toBe(1);
+        expect(insertedDocs[0].status).toBe('Offline');
     });
 
-    it('should handle errors during log creation', async () => {
-        const mockJob = {
-            data: { status: 'Offline', endpointId: 'error-id' },
-        };
-        const dbError = new Error('Database connection failed');
-
-        // Configura o mock para rejeitar a promessa
-        (HealthCheckLogModel.create as jest.Mock).mockRejectedValue(dbError);
+    it('should handle errors during insertMany and not crash', async () => {
+        const dbError = new Error('DB write error');
+        (HealthCheckLogModel.insertMany as jest.Mock).mockRejectedValue(dbError);
 
         startResultsWorker();
 
-        // O teste espera que o processador lide com o erro internamente (com console.error)
-        // e não lance uma exceção que falhe o teste.
-        await expect(workerProcessor(mockJob)).resolves.not.toThrow();
+        const job = { data: { status: 'Online', endpointId: new mongoose.Types.ObjectId().toString() } };
+        await workerProcessor(job);
 
-        expect(HealthCheckLogModel.create).toHaveBeenCalledTimes(1);
+        // Força o flush avançando o tempo
+        // O teste espera que o erro seja capturado e logado, sem que o worker quebre
+        jest.advanceTimersByTime(FLUSH_INTERVAL);
+
+        expect(HealthCheckLogModel.insertMany).toHaveBeenCalledTimes(1);
     });
 });
