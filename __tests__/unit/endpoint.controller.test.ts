@@ -7,6 +7,7 @@ import {
     getEndpointById
 } from '../../src/api/endpoints/endpoint.controller';
 
+jest.mock('redis');
 // Mock do service
 jest.mock('../../src/api/endpoints/endpoint.service');
 

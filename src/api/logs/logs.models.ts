@@ -3,6 +3,7 @@ import mongoose, { Document, Model, Schema } from "mongoose";
 export interface IHealthCheckLog extends Document {
     status: 'Online' | 'Offline';
     statusCode: number | null;
+    data: any | null;
     responseTimeInMs: number;
     endpointId: mongoose.Schema.Types.ObjectId;
 }
@@ -10,6 +11,7 @@ export interface IHealthCheckLog extends Document {
 const healthCheckLogSchema: Schema = new Schema({
     status: { type: String, required: true },
     statusCode: { type: Number },
+    data: { type: mongoose.Schema.Types.Mixed },
     responseTimeInMs: { type: Number, required: true },
     endpointId: { type: mongoose.Schema.Types.ObjectId, ref: 'Endpoint', required: true },
 }, { timestamps: { createdAt: true, updatedAt: true }});

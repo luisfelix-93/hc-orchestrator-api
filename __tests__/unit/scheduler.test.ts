@@ -1,24 +1,27 @@
-import cron from 'node-cron';
-import { EndpointModel } from '../../src/api/endpoints/endpoint.model';
+import { Worker } from 'bullmq';
+import * as endpointService from '../../src/api/endpoints/endpoint.service';
 import { healthCheckJobsQueue } from '../../src/jobs/queue';
-import { startScheduler } from '../../src/jobs/scheduler';
+import { startSchedulerWorker } from '../../src/jobs/scheduler.worker';
 
-// Mock das dependências externas
-jest.mock('node-cron');
-jest.mock('../../src/api/endpoints/endpoint.model');
+jest.mock('bullmq');
+jest.mock('../../src/api/endpoints/endpoint.service');
 jest.mock('../../src/jobs/queue', () => ({
+    ...jest.requireActual('../../src/jobs/queue'), // Mantém implementações originais que não queremos mocar
     healthCheckJobsQueue: {
         add: jest.fn(),
     },
 }));
 
-describe('Scheduler', () => {
-    let cronCallback: () => Promise<void>;
+const mockedEndpointService = endpointService as jest.Mocked<typeof endpointService>;
+
+
+describe('Scheduler Worker', () => {
+    let workerProcessor: (job: { id: string }) => Promise<void>;
 
     beforeAll(() => {
-        // Captura o callback passado para cron.schedule
-        (cron.schedule as jest.Mock).mockImplementation((pattern, callback) => {
-            cronCallback = callback;
+        (Worker as jest.Mock).mockImplementation((queueName, processor) => {
+            workerProcessor = processor;
+            return { on: jest.fn(), close: jest.fn() };
         });
     });
 
@@ -26,26 +29,21 @@ describe('Scheduler', () => {
         jest.clearAllMocks();
     });
 
-    it('should schedule a job and execute it', async () => {
+    it('should fetch endpoints and add them to the health check queue', async () => {
         const mockEndpoints = [
-            { id: '1', url: 'http://test1.com' },
-            { id: '2', url: 'http://test2.com' },
+            { _id: { toString: () => '1' }, url: 'http://test1.com' },
+            { _id: { toString: () => '2' }, url: 'http://test2.com' },
         ];
+        mockedEndpointService.getAllEndpoints.mockResolvedValue(mockEndpoints as any);
 
-        // Configura o mock do Model
-        (EndpointModel.find as jest.Mock).mockReturnValue({
-            select: jest.fn().mockReturnThis(),
-            cursor: jest.fn().mockReturnValue(mockEndpoints),
-        });
+        // Inicia o worker para registrar o processador
+        startSchedulerWorker();
 
-        // Inicia o agendador para registrar o callback
-        startScheduler();
+        // Executa manualmente o processador
+        await workerProcessor({ id: 'test-job-1' });
 
-        // Executa o callback do cron manualmente
-        await cronCallback();
-
-        // Verifica se a busca no banco foi feita
-        expect(EndpointModel.find).toHaveBeenCalled();
+        // Verifica se os endpoints foram buscados
+        expect(mockedEndpointService.getAllEndpoints).toHaveBeenCalledTimes(1);
 
         // Verifica se os jobs foram adicionados à fila
         expect(healthCheckJobsQueue.add).toHaveBeenCalledTimes(2);
@@ -59,17 +57,25 @@ describe('Scheduler', () => {
         });
     });
 
-    it('should handle the case with no endpoints', async () => {
-        // Configura o mock para não retornar endpoints
-        (EndpointModel.find as jest.Mock).mockReturnValue({
-            select: jest.fn().mockReturnThis(),
-            cursor: jest.fn().mockReturnValue([]),
-        });
+    it('should handle the case where there are no endpoints', async () => {
+        mockedEndpointService.getAllEndpoints.mockResolvedValue([]);
 
-        startScheduler();
-        await cronCallback();
+        startSchedulerWorker();
+        await workerProcessor({ id: 'test-job-2' });
 
-        expect(EndpointModel.find).toHaveBeenCalled();
+        expect(mockedEndpointService.getAllEndpoints).toHaveBeenCalledTimes(1);
+        expect(healthCheckJobsQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('should throw an error if fetching endpoints fails', async () => {
+        const dbError = new Error('Database error');
+        mockedEndpointService.getAllEndpoints.mockRejectedValue(dbError);
+
+        startSchedulerWorker();
+
+        // Verifica se o worker lança o erro para o BullMQ poder tratar o retry
+        await expect(workerProcessor({ id: 'test-job-3' })).rejects.toThrow('Database error');
+
         expect(healthCheckJobsQueue.add).not.toHaveBeenCalled();
     });
 });

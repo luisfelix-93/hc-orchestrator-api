@@ -1,41 +1,20 @@
-# =================================================================
-# STAGE 1: Build a aplicação
-# =================================================================
-FROM node:18 AS build
-
-# Define o diretório de trabalho dentro do container
+# Estágio 1: Builder - Instala dependências e gera o bundle
+FROM node:18-alpine AS builder
 WORKDIR /usr/src/app
-
-# Copia os arquivos de definição de pacotes
 COPY package*.json ./
-
-# Instala todas as dependências (incluindo devDependencies)
 RUN npm install
-
-# Copia o restante do código-fonte da aplicação
 COPY . .
+RUN npm run build:prod
 
-# Compila o código TypeScript para JavaScript
-RUN npm run build
-
-# =================================================================
-# STAGE 2: Cria a imagem final de produção
-# =================================================================
+# Estágio 2: Production - Copia apenas o necessário para rodar
 FROM node:18-alpine
-
 WORKDIR /usr/src/app
-
-# Copia os arquivos de definição de pacotes
 COPY package*.json ./
+# Instala SOMENTE as dependências de produção
+RUN npm install --omit=dev
 
-# Instala apenas as dependências de produção
-RUN npm ci --only=production
+# Copia o bundle gerado no estágio anterior
+COPY --from=builder /usr/src/app/dist/bundle.js ./dist/bundle.js
 
-# Copia o código compilado do estágio de build
-COPY --from=build /usr/src/app/dist ./dist
-
-# Expõe a porta que a aplicação irá rodar
-EXPOSE 5001
-
-# Comando para iniciar a aplicação
-CMD [ "node", "dist/index.js" ]
+# O comando agora executa o arquivo único
+CMD [ "node", "dist/bundle.js" ]

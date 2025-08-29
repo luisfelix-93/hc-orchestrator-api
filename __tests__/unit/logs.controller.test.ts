@@ -46,11 +46,26 @@ describe('Logs Controller', () => {
             const endpointId = 'some-id';
             const logs = [{ status: 'Online', endpointId }];
             mockRequest.params = { endpointId };
+            mockRequest.query = {};
             mockedLogService.getLogsByEndpointId.mockResolvedValue(logs as any);
 
             await findById(mockRequest as Request, mockResponse as Response);
 
-            expect(mockedLogService.getLogsByEndpointId).toHaveBeenCalledWith(endpointId);
+            expect(mockedLogService.getLogsByEndpointId).toHaveBeenCalledWith(endpointId, 1, 100);
+            expect(responseStatus).toHaveBeenCalledWith(200);
+            expect(responseJson).toHaveBeenCalledWith(logs);
+        });
+
+        it('should get logs for a specific endpoint with query params and return a 200 status', async () => {
+            const endpointId = 'some-id';
+            const logs = [{ status: 'Online', endpointId }];
+            mockRequest.params = { endpointId };
+            mockRequest.query = { page: '2', limit: '50' };
+            mockedLogService.getLogsByEndpointId.mockResolvedValue(logs as any);
+
+            await findById(mockRequest as Request, mockResponse as Response);
+
+            expect(mockedLogService.getLogsByEndpointId).toHaveBeenCalledWith(endpointId, 2, 50);
             expect(responseStatus).toHaveBeenCalledWith(200);
             expect(responseJson).toHaveBeenCalledWith(logs);
         });
@@ -59,11 +74,12 @@ describe('Logs Controller', () => {
             const endpointId = 'error-id';
             const error = new Error('DB Error');
             mockRequest.params = { endpointId };
+            mockRequest.query = {};
             mockedLogService.getLogsByEndpointId.mockRejectedValue(error);
 
             await findById(mockRequest as Request, mockResponse as Response);
 
-            expect(mockedLogService.getLogsByEndpointId).toHaveBeenCalledWith(endpointId);
+            expect(mockedLogService.getLogsByEndpointId).toHaveBeenCalledWith(endpointId, 1, 100);
             expect(responseStatus).toHaveBeenCalledWith(500);
             expect(responseJson).toHaveBeenCalledWith({ error: 'Erro interno ao buscar os logs do endpoint.' });
         });
